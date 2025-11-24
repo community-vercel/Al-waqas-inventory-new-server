@@ -34,16 +34,28 @@ const createColor = async (req, res) => {
     try {
         const { name, codeName, hexCode } = req.body;
 
-        // Check if color with same hex code already exists
-        const existingColor = await Color.findOne({ 
-            hexCode: hexCode.toUpperCase(),
-            isActive: true
+        // Check if color with same name, codeName, or hexCode already exists
+        const existingColor = await Color.findOne({
+            $or: [
+                { name: new RegExp(`^${name}$`, 'i'), isActive: true },
+                { codeName: codeName.toUpperCase(), isActive: true },
+                { hexCode: hexCode.toUpperCase(), isActive: true }
+            ]
         });
 
         if (existingColor) {
+            let duplicateField = '';
+            if (existingColor.name.toLowerCase() === name.toLowerCase()) {
+                duplicateField = 'name';
+            } else if (existingColor.codeName === codeName.toUpperCase()) {
+                duplicateField = 'code name';
+            } else if (existingColor.hexCode === hexCode.toUpperCase()) {
+                duplicateField = 'hex code';
+            }
+
             return res.status(400).json({
                 success: false,
-                message: 'Color with this hex code already exists'
+                message: `Color with this ${duplicateField} already exists`
             });
         }
 
@@ -164,52 +176,43 @@ const uploadColorsFromCSV = async (req, res) => {
             });
         }
 
-        // Check for duplicate HEX CODES in the CSV itself (only check hex codes)
-        const seenHexCodes = new Set();
-        const hexCodeDuplicates = [];
+        // REMOVED: Duplicate checking within CSV - ALLOW ALL DUPLICATES IN CSV
+        // We only check against the database
 
-        results.forEach((item, index) => {
-            if (seenHexCodes.has(item.hexCode)) {
-                hexCodeDuplicates.push({
-                    row: index + 2,
-                    error: `Duplicate hex code in CSV: ${item.hexCode}`,
-                    data: item
-                });
-            }
-            seenHexCodes.add(item.hexCode);
-        });
-
-        if (hexCodeDuplicates.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Duplicate hex codes found in CSV',
-                duplicates: hexCodeDuplicates.slice(0, 10),
-                totalDuplicates: hexCodeDuplicates.length
-            });
-        }
-
-        // Check for existing colors in database (ONLY check hex codes)
+        // Check for existing colors in database (check ALL fields)
         const existingColors = await Color.find({
-            hexCode: { $in: results.map(r => r.hexCode) },
-            isActive: true
+            $or: [
+                { name: { $in: results.map(r => new RegExp(`^${r.name}$`, 'i')) }, isActive: true },
+                { codeName: { $in: results.map(r => r.codeName) }, isActive: true },
+                { hexCode: { $in: results.map(r => r.hexCode) }, isActive: true }
+            ]
         });
 
-        // Create set of existing hex codes for quick lookup
+        // Create sets of existing values for quick lookup
+        const existingNames = new Set(existingColors.map(c => c.name.toLowerCase()));
+        const existingCodeNames = new Set(existingColors.map(c => c.codeName));
         const existingHexCodes = new Set(existingColors.map(c => c.hexCode));
 
-        // Filter out colors that already exist (based on hex code only)
+        // Filter out colors that already exist (based on any field)
         const newColors = [];
         const skippedColors = [];
 
         results.forEach(item => {
-            const exists = existingHexCodes.has(item.hexCode);
+            const duplicateName = existingNames.has(item.name.toLowerCase());
+            const duplicateCodeName = existingCodeNames.has(item.codeName);
+            const duplicateHexCode = existingHexCodes.has(item.hexCode);
 
-            if (exists) {
+            if (duplicateName || duplicateCodeName || duplicateHexCode) {
+                let reason = '';
+                if (duplicateName) reason = `Color name "${item.name}" already exists`;
+                else if (duplicateCodeName) reason = `Code name "${item.codeName}" already exists`;
+                else if (duplicateHexCode) reason = `Hex code "${item.hexCode}" already exists`;
+
                 skippedColors.push({
                     name: item.name,
                     codeName: item.codeName,
                     hexCode: item.hexCode,
-                    reason: 'Color with this hex code already exists in database'
+                    reason: reason
                 });
             } else {
                 newColors.push(item);
@@ -219,7 +222,7 @@ const uploadColorsFromCSV = async (req, res) => {
         if (newColors.length === 0) {
             return res.status(400).json({
                 success: false,
-                message: 'All colors in the CSV already exist in the database (duplicate hex codes)',
+                message: 'All colors in the CSV already exist in the database',
                 skipped: skippedColors,
                 summary: {
                     totalRows: rowCount,
@@ -238,7 +241,7 @@ const uploadColorsFromCSV = async (req, res) => {
 
         res.status(201).json({
             success: true,
-            message: `Successfully imported ${createdColors.length} colors, skipped ${skippedColors.length} existing colors (duplicate hex codes)`,
+            message: `Successfully imported ${createdColors.length} colors, skipped ${skippedColors.length} existing colors`,
             data: createdColors,
             skipped: skippedColors,
             summary: {
@@ -265,20 +268,31 @@ const uploadColorsFromCSV = async (req, res) => {
 // @access  Private
 const updateColor = async (req, res) => {
     try {
-        const { hexCode } = req.body;
+        const { name, codeName, hexCode } = req.body;
 
-        // If updating hex code, check for duplicates
-        if (hexCode) {
+        // Check for duplicates when updating
+        if (name || codeName || hexCode) {
             const existingColor = await Color.findOne({
-                hexCode: hexCode.toUpperCase(),
-                isActive: true,
-                _id: { $ne: req.params.id } // Exclude current color
+                $or: [
+                    { name: name ? new RegExp(`^${name}$`, 'i') : undefined, isActive: true, _id: { $ne: req.params.id } },
+                    { codeName: codeName ? codeName.toUpperCase() : undefined, isActive: true, _id: { $ne: req.params.id } },
+                    { hexCode: hexCode ? hexCode.toUpperCase() : undefined, isActive: true, _id: { $ne: req.params.id } }
+                ].filter(condition => Object.values(condition).some(val => val !== undefined))
             });
 
             if (existingColor) {
+                let duplicateField = '';
+                if (name && existingColor.name.toLowerCase() === name.toLowerCase()) {
+                    duplicateField = 'name';
+                } else if (codeName && existingColor.codeName === codeName.toUpperCase()) {
+                    duplicateField = 'code name';
+                } else if (hexCode && existingColor.hexCode === hexCode.toUpperCase()) {
+                    duplicateField = 'hex code';
+                }
+
                 return res.status(400).json({
                     success: false,
-                    message: 'Another color with this hex code already exists'
+                    message: `Another color with this ${duplicateField} already exists`
                 });
             }
         }
@@ -287,6 +301,7 @@ const updateColor = async (req, res) => {
             req.params.id,
             {
                 ...req.body,
+                name: req.body.name,
                 codeName: req.body.codeName ? req.body.codeName.toUpperCase() : undefined,
                 hexCode: req.body.hexCode ? req.body.hexCode.toUpperCase() : undefined
             },
