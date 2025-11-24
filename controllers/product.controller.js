@@ -162,9 +162,9 @@ const createProduct = async (req, res) => {
             });
         }
 
-        // Check if product with same name and type already exists
+        // Check if product with same name and type already exists - FIXED
         const existingProduct = await Product.findOne({
-            name: new RegExp(`^${name}$`, 'i'),
+            name: { $regex: `^${name}$`, $options: 'i' }, // Fixed regex issue
             type: type.toLowerCase(),
             isActive: true
         });
