@@ -362,6 +362,7 @@ const deleteColor = async (req, res) => {
     }
 };
 
+
 module.exports = {
     getColors,
     createColor,
