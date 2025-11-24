@@ -289,7 +289,7 @@ const uploadProductsFromCSV = async (req, res) => {
                 continue;
             }
 
-            // Process colors - FIXED
+            // Process colors
             const colorIds = [];
             const colorErrors = [];
             const foundColors = [];
@@ -358,8 +358,8 @@ const uploadProductsFromCSV = async (req, res) => {
             }
 
             // Validate numeric fields
-            const purchasePrice = parseFloat(row.purchasePrice);
-            const salePrice = parseFloat(row.salePrice);
+            const purchasePrice = parseFloat(row.purchasePrice.replace(/,/g, '')); // Remove commas
+            const salePrice = parseFloat(row.salePrice.replace(/,/g, '')); // Remove commas
             const discount = row.discount ? parseFloat(row.discount) : 0;
 
             if (isNaN(purchasePrice) || purchasePrice < 0) {
@@ -418,14 +418,14 @@ const uploadProductsFromCSV = async (req, res) => {
             });
         }
 
-        // Check for duplicates
+        // Check for duplicates using collation (FIXED)
         const existingProducts = await Product.find({
             $or: results.map(r => ({
-                name: new RegExp(`^${r.name}$`, 'i'),
+                name: r.name,
                 type: r.type,
                 isActive: true
             }))
-        });
+        }).collation({ locale: 'en', strength: 2 }); // Case-insensitive comparison
 
         if (existingProducts.length > 0) {
             return res.status(400).json({
