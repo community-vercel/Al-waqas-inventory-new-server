@@ -169,12 +169,12 @@ const uploadColorsFromCSV = async (req, res) => {
             });
         }
 
-        // if (results.length === 0) {
-        //     return res.status(400).json({
-        //         success: false,
-        //         message: 'No valid color data found in CSV file'
-        //     });
-        // }
+        if (results.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No valid color data found in CSV file'
+            });
+        }
 
         // REMOVED: Duplicate checking within CSV - ALLOW ALL DUPLICATES IN CSV
         // We only check against the database
