@@ -28,7 +28,8 @@ mongoose.set('strictPopulate', false);
 app.use(cors({
   origin: [
     'http://localhost:5173',
-    'https://al-waqas-inventory-new-client.vercel.app'
+    'https://al-waqas-inventory-new-client.vercel.app',
+    'https://inventory.alwaqaspaint.com'
   ],
   methods: 'GET,POST,PUT,PATCH,DELETE',
   credentials: true
