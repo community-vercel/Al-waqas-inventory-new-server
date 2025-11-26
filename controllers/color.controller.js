@@ -45,11 +45,11 @@ const createColor = async (req, res) => {
 
         if (existingColor) {
             let duplicateField = '';
-            if (existingColor.name.toLowerCase() === name.toLowerCase()) {
-                duplicateField = 'name';
-            } else if (existingColor.codeName === codeName.toUpperCase()) {
+            
+             if (existingColor.codeName === codeName.toUpperCase()) {
                 duplicateField = 'code name';
-            } else if (existingColor.hexCode === hexCode.toUpperCase()) {
+            } 
+            else if (existingColor.hexCode === hexCode.toUpperCase()) {
                 duplicateField = 'hex code';
             }
 
