@@ -45,7 +45,7 @@ app.use('/api/contacts', contactRoutes)
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,
-    message: 'Paint Shop POS API is running',
+    message: 'Al Waqas Paint Shop Inventory API is running',
     timestamp: new Date().toISOString()
   });
 });

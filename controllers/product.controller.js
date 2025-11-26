@@ -289,6 +289,18 @@ const uploadProductsFromCSV = async (req, res) => {
                 continue;
             }
 
+            // Validate product type - ADDED 'other' VALIDATION
+            const type = row.type.trim().toLowerCase();
+            const validTypes = ['gallon', 'dibbi', 'quarter', 'p', 'other'];
+            if (!validTypes.includes(type)) {
+                errors.push({
+                    row: index + 2,
+                    error: `Invalid product type: "${row.type}". Valid types are: ${validTypes.join(', ')}`,
+                    data: { name: row.name, type: row.type }
+                });
+                continue;
+            }
+
             // Process colors
             const colorIds = [];
             const colorErrors = [];
@@ -391,7 +403,7 @@ const uploadProductsFromCSV = async (req, res) => {
 
             results.push({
                 name: row.name.trim(),
-                type: row.type.trim().toLowerCase(),
+                type: type, // Use the validated type
                 purchasePrice: purchasePrice,
                 salePrice: salePrice,
                 discount: discount,
