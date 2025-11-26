@@ -26,10 +26,16 @@ mongoose.set('strictPopulate', false);
 
 // Middleware
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: [
+    'http://localhost:5173',
+    'https://al-waqas-inventory-new-client.vercel.app'
+  ],
   methods: 'GET,POST,PUT,PATCH,DELETE',
   credentials: true
-}));app.use(express.json());
+}));
+
+
+app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 // Routes
