@@ -9,7 +9,7 @@ const productSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['gallon', 'dibbi', 'quarter', 'p','other'],
+        enum: ['gallon', 'dibbi', 'quarter', 'p','other', 'drum'],
         required: [true, 'Product type is required']
     },
     purchasePrice: {

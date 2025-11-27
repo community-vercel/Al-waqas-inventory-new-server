@@ -139,6 +139,15 @@ const createProduct = async (req, res) => {
             });
         }
 
+        // Validate product type - ADDED 'drum' VALIDATION
+        const validTypes = ['gallon', 'dibbi', 'quarter', 'p', 'drum', 'other'];
+        if (!validTypes.includes(type.toLowerCase())) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid product type: "${type}". Valid types are: ${validTypes.join(', ')}`
+            });
+        }
+
         // Validate colors
         if (!colors || (Array.isArray(colors) && colors.length === 0) || colors === '') {
             return res.status(400).json({
@@ -289,9 +298,9 @@ const uploadProductsFromCSV = async (req, res) => {
                 continue;
             }
 
-            // Validate product type - ADDED 'other' VALIDATION
+            // Validate product type - ADDED 'drum' VALIDATION
             const type = row.type.trim().toLowerCase();
-            const validTypes = ['gallon', 'dibbi', 'quarter', 'p', 'other'];
+            const validTypes = ['gallon', 'dibbi', 'quarter', 'p', 'drum', 'other']; // Added 'drum'
             if (!validTypes.includes(type)) {
                 errors.push({
                     row: index + 2,
@@ -488,7 +497,19 @@ const uploadProductsFromCSV = async (req, res) => {
 // @access  Private
 const updateProduct = async (req, res) => {
     try {
-        const { colors, ...otherFields } = req.body;
+        const { colors, type, ...otherFields } = req.body;
+
+        // Validate product type if provided - ADDED 'drum' VALIDATION
+        if (type) {
+            const validTypes = ['gallon', 'dibbi', 'quarter', 'p', 'drum', 'other'];
+            if (!validTypes.includes(type.toLowerCase())) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Invalid product type: "${type}". Valid types are: ${validTypes.join(', ')}`
+                });
+            }
+            otherFields.type = type.toLowerCase();
+        }
 
         if (colors !== undefined) {
             let colorArray = [];
