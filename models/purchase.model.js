@@ -92,7 +92,45 @@ purchaseSchema.post('save', async function (doc) {
     console.error('Failed to update inventory (purchase save):', error.message);
   }
 });
+// Add this middleware to handle updates
+purchaseSchema.post('findOneAndUpdate', async function(doc) {
+    if (!doc) return;
 
+    try {
+        const update = this.getUpdate();
+
+        // Only run if quantity or unitPrice changed
+        if (update.quantity !== undefined || update.unitPrice !== undefined) {
+            const qtyDiff = (update.quantity || doc.quantity) - doc.quantity;
+            const newUnitPrice = update.unitPrice || doc.unitPrice;
+
+            // Update inventory quantity
+            if (qtyDiff !== 0) {
+                await Inventory.findOneAndUpdate(
+                    { product: doc.product, color: doc.color || null },
+                    { 
+                        $inc: { quantity: qtyDiff },
+                        lastUpdated: new Date(),
+                        updatedBy: doc.createdBy // or use current user if available
+                    },
+                    { upsert: true }
+                );
+            }
+
+            // Update product's latest purchase price
+            if (update.unitPrice !== undefined) {
+                await Product.findByIdAndUpdate(doc.product, {
+                    purchasePrice: newUnitPrice
+                });
+            }
+
+            // Trigger frontend refresh
+            // Note: This won't work in backend directly, better to do it in controller
+        }
+    } catch (err) {
+        console.error('Purchase update middleware error:', err);
+    }
+});
 // Auto-revert inventory on delete
 purchaseSchema.post('findOneAndDelete', async function (doc) {
   if (!doc) return;

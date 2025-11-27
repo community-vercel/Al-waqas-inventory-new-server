@@ -127,14 +127,17 @@ const createPurchase = async (req, res) => {
     }
 };
 
-// @desc    Update purchase
+// @desc    Update purchase + Update Product purchasePrice
 // @route   PUT /api/purchases/:id
 // @access  Private
 const updatePurchase = async (req, res) => {
-    try {
-        const { quantity, unitPrice, supplier, color } = req.body;
-        const purchase = await Purchase.findById(req.params.id);
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
+    try {
+        const { quantity, unitPrice, supplier, color, product: productId } = req.body;
+
+        const purchase = await Purchase.findById(req.params.id);
         if (!purchase) {
             return res.status(404).json({
                 success: false,
@@ -142,13 +145,15 @@ const updatePurchase = async (req, res) => {
             });
         }
 
+        // === 1. Update the Purchase record ===
+        const oldQuantity = purchase.quantity;
         const totalAmount = quantity * unitPrice;
 
         const updateData = {
-            quantity,
-            unitPrice,
+            quantity: parseInt(quantity),
+            unitPrice: parseFloat(unitPrice),
             totalAmount,
-            supplier: supplier || purchase.supplier
+            supplier: supplier?.trim() || purchase.supplier,
         };
 
         if (color !== undefined) {
@@ -159,26 +164,67 @@ const updatePurchase = async (req, res) => {
             req.params.id,
             updateData,
             { new: true, runValidators: true }
-        )
-        .populate('product', 'name type purchasePrice salePrice')
-        .populate('color', 'name hexCode')
-        .populate('createdBy', 'name email');
+        ).populate('product', 'name type purchasePrice salePrice');
+
+        // === 2. CRITICAL: Update Product's purchasePrice if unitPrice changed ===
+        if (unitPrice && parseFloat(unitPrice) !== purchase.unitPrice) {
+            await Product.findByIdAndUpdate(
+                purchase.product,
+                { purchasePrice: parseFloat(unitPrice) },
+                { session }
+            );
+        }
+
+        // === 3. Adjust Inventory Quantity (if quantity changed) ===
+        if (quantity !== oldQuantity) {
+            const qtyDiff = quantity - oldQuantity;
+
+            // Find or create inventory entry
+            const inventoryFilter = {
+                product: purchase.product,
+                color: color || null
+            };
+
+            await Inventory.findOneAndUpdate(
+                inventoryFilter,
+                { $inc: { quantity: qtyDiff }, lastUpdated: new Date(), updatedBy: req.user.id },
+                { upsert: true, new: true, session }
+            );
+        }
+
+        await session.commitTransaction();
+
+        // Populate final purchase
+        const populatedPurchase = await Purchase.findById(req.params.id)
+            .populate('product', 'name type purchasePrice salePrice')
+            .populate('color', 'name hexCode codeName')
+            .populate('createdBy', 'name email');
+
+        // === 4. Trigger real-time update in frontend ===
+        // This will make Inventory.jsx refresh immediately
+        setTimeout(() => {
+            window.dispatchEvent(new Event('inventoryShouldUpdate'));
+            localStorage.setItem('inventoryLastUpdate', Date.now().toString());
+        }, 100);
 
         res.json({
             success: true,
-            message: 'Purchase updated successfully',
-            data: updatedPurchase
+            message: 'Purchase updated successfully and inventory synced',
+            data: populatedPurchase
         });
+
     } catch (error) {
+        await session.abortTransaction();
         console.error('Update purchase error:', error);
         res.status(500).json({
             success: false,
             message: 'Error updating purchase',
             error: error.message
         });
+    } finally {
+        session.endSession();
     }
 };
-
 // @desc    Delete purchase
 // @route   DELETE /api/purchases/:id
 // @access  Private
