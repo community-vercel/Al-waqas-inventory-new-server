@@ -1,4 +1,4 @@
-// models/product.model.js
+// models/product.model.js - UPGRADED WITH INITIAL STOCK + CODE
 const mongoose = require('mongoose');
 
 const productSchema = new mongoose.Schema({
@@ -9,7 +9,7 @@ const productSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['gallon', 'dibbi', 'quarter', 'p','other', 'drum'],
+        enum: ['gallon', 'dibbi', 'quarter', 'p', 'other', 'drum'],
         required: [true, 'Product type is required']
     },
     purchasePrice: {
@@ -28,19 +28,23 @@ const productSchema = new mongoose.Schema({
         min: 0,
         max: 100
     },
-    colors: {
-        type: [{
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'Color',
-            required: true
-        }],
-        validate: {
-            validator: function(colorsArray) {
-                return colorsArray && colorsArray.length > 0;
-            },
-            message: 'At least one color is required'
+    code: {
+        type: String,
+        trim: true,
+        uppercase: true,
+        default: null,
+        sparse: true  // Allows multiple nulls + unique if needed later
+        // unique: true → you can enable later if needed
+    },
+  
+    initialStock: {
+        type: Map,
+        of: {
+            qty: { type: Number, min: 0, default: 0 },
+            addedAt: { type: Date, default: Date.now }
         },
-        required: [true, 'Colors array is required']
+        default: () => new Map()
+        // This will store: colorId → { qty: 50, addedAt: Date }
     },
     isActive: {
         type: Boolean,
@@ -55,7 +59,8 @@ const productSchema = new mongoose.Schema({
     timestamps: true
 });
 
-// Index for better query performance
+// Indexes
 productSchema.index({ name: 1, type: 1, isActive: 1 });
+productSchema.index({ code: 1 }, { sparse: true });
 
 module.exports = mongoose.model('Product', productSchema);

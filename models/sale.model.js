@@ -1,7 +1,6 @@
-// models/sale.model.js - FINAL WITH RETRY ON CONFLICT
+// models/sale.model.js - FINAL: COLOR IS OPTIONAL (AUTO FROM CODE)
 const mongoose = require('mongoose');
 
-// Same retry helper as above
 const withRetry = async (operation, maxRetries = 5) => {
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -38,7 +37,8 @@ const saleSchema = new mongoose.Schema(
     color: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Color',
-      required: [true, 'Color is required'],
+      required: false,  // ← NOW OPTIONAL
+      default: null
     },
     quantity: {
       type: Number,
@@ -70,59 +70,63 @@ const saleSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Deduct inventory on sale
+// models/sale.model.js — ADD THIS EXACT MIDDLEWARE
+
+// Deduct inventory when sale is created
 saleSchema.post('save', async function (doc) {
   try {
-    await withRetry(async () => {
-      const Inventory = mongoose.model('Inventory');
-      const filter = { product: doc.product, color: doc.color };
+    const Inventory = mongoose.model('Inventory');
 
-      const result = await Inventory.findOneAndUpdate(
-        filter,
-        {
-          $inc: { quantity: -doc.quantity },
-          lastUpdated: new Date(),
-          updatedBy: doc.createdBy,
-        },
-        { new: true }
-      );
+    // Find inventory entry — color may be null
+    const filter = { product: doc.product };
+    if (doc.color) filter.color = doc.color;
 
-      if (!result) {
-        throw new Error('Inventory not found for this product+color');
-      }
-    });
-    console.log('Inventory deducted for sale:', doc._id);
+    const result = await Inventory.findOneAndUpdate(
+      filter,
+      {
+        $inc: { quantity: -doc.quantity },
+        lastUpdated: new Date(),
+        updatedBy: doc.createdBy
+      },
+      { new: true }
+    );
+
+    if (!result) {
+      console.error(`Inventory not found for product ${doc.product} color ${doc.color}`);
+      // Don't throw — sale already saved
+    } else {
+      console.log(`Stock deducted: ${doc.quantity} of product ${doc.product}`);
+    }
   } catch (error) {
-    console.error('Failed to deduct inventory (sale):', error.message);
+    console.error('Failed to deduct inventory on sale:', error);
   }
 });
 
-// Restore inventory on sale deletion
+// Restore inventory when sale is deleted
 saleSchema.post('findOneAndDelete', async function (doc) {
   if (!doc) return;
-  try {
-    await withRetry(async () => {
-      const Inventory = mongoose.model('Inventory');
-      const filter = { product: doc.product, color: doc.color };
 
-      await Inventory.findOneAndUpdate(
-        filter,
-        {
-          $inc: { quantity: doc.quantity },
-          lastUpdated: new Date(),
-        }
-      );
-    });
-    console.log('Inventory restored after sale deletion:', doc._id);
+  try {
+    const Inventory = mongoose.model('Inventory');
+    const filter = { product: doc.product };
+    if (doc.color) filter.color = doc.color;
+
+    await Inventory.findOneAndUpdate(
+      filter,
+      {
+        $inc: { quantity: doc.quantity },
+        lastUpdated: new Date()
+      }
+    );
+    console.log(`Stock restored: ${doc.quantity} for deleted sale`);
   } catch (error) {
-    console.error('Failed to restore inventory (sale delete):', error.message);
+    console.error('Failed to restore inventory:', error);
   }
 });
 
 // Indexes
 saleSchema.index({ date: -1 });
 saleSchema.index({ product: 1 });
-saleSchema.index({ color: 1 });
 saleSchema.index({ customerName: 1 });
 
 module.exports = mongoose.model('Sale', saleSchema);

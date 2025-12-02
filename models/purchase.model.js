@@ -70,28 +70,28 @@ const purchaseSchema = new mongoose.Schema(
 );
 
 // Auto-sync inventory on save (create or update)
-purchaseSchema.post('save', async function (doc) {
-  try {
-    await withRetry(async () => {
-      const Inventory = mongoose.model('Inventory');
-      const filter = { product: doc.product };
-      if (doc.color) filter.color = doc.color;
+// purchaseSchema.post('save', async function (doc) {
+//   try {
+//     await withRetry(async () => {
+//       const Inventory = mongoose.model('Inventory');
+//       const filter = { product: doc.product };
+//       if (doc.color) filter.color = doc.color;
 
-      await Inventory.findOneAndUpdate(
-        filter,
-        {
-          $inc: { quantity: doc.quantity },
-          lastUpdated: new Date(),
-          updatedBy: doc.createdBy,
-        },
-        { upsert: true, new: true }
-      );
-    });
-    console.log('Inventory updated successfully for purchase:', doc._id);
-  } catch (error) {
-    console.error('Failed to update inventory (purchase save):', error.message);
-  }
-});
+//       await Inventory.findOneAndUpdate(
+//         filter,
+//         {
+//           $inc: { quantity: doc.quantity },
+//           lastUpdated: new Date(),
+//           updatedBy: doc.createdBy,
+//         },
+//         { upsert: true, new: true }
+//       );
+//     });
+//     console.log('Inventory updated successfully for purchase:', doc._id);
+//   } catch (error) {
+//     console.error('Failed to update inventory (purchase save):', error.message);
+//   }
+// });
 // Add this middleware to handle updates
 purchaseSchema.post('findOneAndUpdate', async function(doc) {
     if (!doc) return;

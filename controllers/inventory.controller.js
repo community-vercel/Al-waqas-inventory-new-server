@@ -1,19 +1,65 @@
-// controllers/inventory.controller.js - FINAL 100% WORKING
+// controllers/inventory.controller.js - FINAL: SHOW ALL PRODUCTS (INCLUDING QTY = 0)
 const Inventory = require('../models/inventory.model');
+const Product = require('../models/product.model');
 
+// GET ALL INVENTORY — INCLUDING ZERO STOCK
 const getInventory = async (req, res) => {
   try {
-    const inventory = await Inventory.find()
-      .populate('product', 'name type purchasePrice')
-      .populate('color', 'name codeName hexCode')  // Correct
-      .populate('updatedBy', 'name email')
-      .sort({ 'product.name': 1 });
+    // First get ALL products (active only)
+    const products = await Product.find({ isActive: true }).select('_id name type code purchasePrice');
+
+    // Then get existing inventory entries
+    const inventoryEntries = await Inventory.find()
+      .populate({
+        path: 'product',
+        select: 'name type code purchasePrice'
+      })
+      .populate({
+        path: 'color',
+        select: 'name codeName hexCode'
+      })
+      .populate('updatedBy', 'name email');
+
+    // Create a map of productId → inventory entry
+    const inventoryMap = new Map();
+    inventoryEntries.forEach(item => {
+      inventoryMap.set(item.product._id.toString(), item);
+    });
+
+    // Build final list: every product appears, even if no inventory entry
+    const fullInventory = products.map(product => {
+      const existing = inventoryMap.get(product._id.toString());
+      
+      if (existing) {
+        return existing; // Already has stock record
+      }
+
+      // No inventory record → create virtual one with qty = 0
+      return {
+        _id: `virtual-${product._id}`,
+        product: product,
+        color: null,
+        quantity: 0,
+        minStockLevel: 5,
+        lastUpdated: null,
+        updatedBy: null,
+        isVirtual: true // optional flag
+      };
+    });
+
+    // Sort by product name
+    fullInventory.sort((a, b) => {
+      const nameA = a.product?.name || '';
+      const nameB = b.product?.name || '';
+      return nameA.localeCompare(nameB);
+    });
 
     res.json({
       success: true,
-      count: inventory.length,
-      data: inventory
+      count: fullInventory.length,
+      data: fullInventory
     });
+
   } catch (error) {
     console.error('Get inventory error:', error);
     res.status(500).json({
@@ -24,13 +70,15 @@ const getInventory = async (req, res) => {
   }
 };
 
+// GET LOW STOCK — ONLY REAL ENTRIES
 const getLowStock = async (req, res) => {
   try {
     const lowStock = await Inventory.find({
-      $expr: { $lte: ['$quantity', '$minStockLevel'] }
+      $expr: { $lte: ['$quantity', '$minStockLevel'] },
+      quantity: { $gt: 0 } // Only real low stock, not zero
     })
-      .populate('product', 'name type purchasePrice')
-      .populate('color', 'name codeName hexCode')  // Correct
+      .populate('product', 'name type code purchasePrice')
+      .populate('color', 'name codeName hexCode')
       .populate('updatedBy', 'name email')
       .sort({ quantity: 1 });
 
@@ -49,7 +97,7 @@ const getLowStock = async (req, res) => {
   }
 };
 
-// FIXED: Use correct populate chain
+// UPDATE INVENTORY
 const updateInventory = async (req, res) => {
   try {
     const { quantity, minStockLevel } = req.body;
@@ -64,8 +112,8 @@ const updateInventory = async (req, res) => {
       },
       { new: true, runValidators: true }
     )
-      .populate('product', 'name type purchasePrice')
-      .populate('color', 'name codeName hexCode')  // Fixed: was wrong before
+      .populate('product', 'name type code purchasePrice')
+      .populate('color', 'name codeName hexCode')
       .populate('updatedBy', 'name email');
 
     if (!inventory) {

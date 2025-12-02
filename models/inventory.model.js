@@ -7,11 +7,10 @@ const inventorySchema = new mongoose.Schema({
         ref: 'Product',
         required: true
     },
-    color: {
+   color: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Color',
-        default: null,                    // null = no color (for accessories, etc.)
-        required: false
+        default: null  // null = no color (accessories, etc.)
     },
     quantity: {
         type: Number,

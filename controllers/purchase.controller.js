@@ -8,6 +8,7 @@ const Inventory = require('../models/inventory.model'); // Add this import
 // @desc    Get all purchases
 // @route   GET /api/purchases
 // @access  Private
+// controllers/purchase.controller.js - FIXED WITH PRODUCT CODE
 const getPurchases = async (req, res) => {
     try {
         const { startDate, endDate, supplier, product } = req.query;
@@ -29,7 +30,10 @@ const getPurchases = async (req, res) => {
         }
 
         const purchases = await Purchase.find(filter)
-            .populate('product', 'name type purchasePrice salePrice')
+            .populate({
+                path: 'product',
+                select: 'name type code purchasePrice salePrice description' // ADDED 'code' HERE
+            })
             .populate('color', 'name hexCode')
             .populate('createdBy', 'name email')
             .sort({ date: -1 });
@@ -56,7 +60,13 @@ const getPurchases = async (req, res) => {
 // @route   POST /api/purchases
 // @access  Private
 // controllers/purchase.controller.js - FINAL CLEAN VERSION
+// @desc    Create new purchase
+// @route   POST /api/purchases
+// @access  Private
 const createPurchase = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
         const { product, supplier, quantity, unitPrice, color } = req.body;
 
@@ -102,13 +112,44 @@ const createPurchase = async (req, res) => {
             color: color && color !== '' ? color : null
         };
 
-        // ONLY CREATE PURCHASE — MIDDLEWARE WILL HANDLE INVENTORY
-        const purchase = await Purchase.create(purchaseData);
+        // CREATE PURCHASE
+        const purchase = await Purchase.create([purchaseData], { session });
+
+        // UPDATE OR CREATE INVENTORY
+        const inventoryFilter = {
+            product: product,
+            color: color && color !== '' ? color : null
+        };
+
+        await Inventory.findOneAndUpdate(
+            inventoryFilter,
+            { 
+                $inc: { quantity: parseInt(quantity) },
+                $set: { 
+                    lastUpdated: new Date(),
+                    updatedBy: req.user.id,
+                    minStockLevel: productExists.minStockLevel || 5
+                }
+            },
+            { upsert: true, session, new: true }
+        );
+
+        // UPDATE PRODUCT'S LATEST PURCHASE PRICE
+        await Product.findByIdAndUpdate(
+            product,
+            { purchasePrice: parseFloat(unitPrice) },
+            { session }
+        );
+
+        await session.commitTransaction();
 
         // Populate response
-        const populatedPurchase = await Purchase.findById(purchase._id)
-            .populate('product', 'name type purchasePrice salePrice')
-            .populate('color', 'name hexCode')
+        const populatedPurchase = await Purchase.findById(purchase[0]._id)
+            .populate({
+                path: 'product',
+                select: 'name type code purchasePrice salePrice'
+            })
+            .populate('color', 'name hexCode codeName')
             .populate('createdBy', 'name email');
 
         res.status(201).json({
@@ -118,12 +159,15 @@ const createPurchase = async (req, res) => {
         });
 
     } catch (error) {
+        await session.abortTransaction();
         console.error('Create purchase error:', error);
         res.status(500).json({
             success: false,
             message: 'Error creating purchase',
             error: error.message
         });
+    } finally {
+        session.endSession();
     }
 };
 
@@ -135,9 +179,9 @@ const updatePurchase = async (req, res) => {
     session.startTransaction();
 
     try {
-        const { quantity, unitPrice, supplier, color, product: productId } = req.body;
+        const { quantity, unitPrice, supplier, color, product: newProductId } = req.body;
 
-        const purchase = await Purchase.findById(req.params.id);
+        const purchase = await Purchase.findById(req.params.id).session(session);
         if (!purchase) {
             return res.status(404).json({
                 success: false,
@@ -145,8 +189,9 @@ const updatePurchase = async (req, res) => {
             });
         }
 
-        // === 1. Update the Purchase record ===
         const oldQuantity = purchase.quantity;
+        const oldProductId = purchase.product;
+        const oldColor = purchase.color;
         const totalAmount = quantity * unitPrice;
 
         const updateData = {
@@ -154,58 +199,79 @@ const updatePurchase = async (req, res) => {
             unitPrice: parseFloat(unitPrice),
             totalAmount,
             supplier: supplier?.trim() || purchase.supplier,
+            color: color !== undefined ? (color || null) : purchase.color,
+            product: newProductId || purchase.product
         };
-
-        if (color !== undefined) {
-            updateData.color = color || null;
-        }
 
         const updatedPurchase = await Purchase.findByIdAndUpdate(
             req.params.id,
             updateData,
-            { new: true, runValidators: true }
-        ).populate('product', 'name type purchasePrice salePrice');
+            { new: true, runValidators: true, session }
+        );
 
-        // === 2. CRITICAL: Update Product's purchasePrice if unitPrice changed ===
+        // Update product's latest purchase price
         if (unitPrice && parseFloat(unitPrice) !== purchase.unitPrice) {
+            const productToUpdate = newProductId || purchase.product;
             await Product.findByIdAndUpdate(
-                purchase.product,
+                productToUpdate,
                 { purchasePrice: parseFloat(unitPrice) },
                 { session }
             );
         }
 
-        // === 3. Adjust Inventory Quantity (if quantity changed) ===
-        if (quantity !== oldQuantity) {
+        // INVENTORY ADJUSTMENT LOGIC
+        if (newProductId && newProductId !== oldProductId) {
+            // PRODUCT CHANGED: Decrease old product inventory, increase new product inventory
+            if (oldProductId) {
+                await Inventory.findOneAndUpdate(
+                    { product: oldProductId, color: oldColor },
+                    { $inc: { quantity: -oldQuantity } },
+                    { session }
+                );
+            }
+            
+            if (newProductId) {
+                await Inventory.findOneAndUpdate(
+                    { product: newProductId, color: color || null },
+                    { $inc: { quantity: parseInt(quantity) } },
+                    { upsert: true, session }
+                );
+            }
+        } else if (quantity !== oldQuantity) {
+            // SAME PRODUCT, QUANTITY CHANGED: Adjust inventory
             const qtyDiff = quantity - oldQuantity;
-
-            // Find or create inventory entry
-            const inventoryFilter = {
-                product: purchase.product,
-                color: color || null
-            };
-
             await Inventory.findOneAndUpdate(
-                inventoryFilter,
-                { $inc: { quantity: qtyDiff }, lastUpdated: new Date(), updatedBy: req.user.id },
-                { upsert: true, new: true, session }
+                { product: purchase.product, color: color || purchase.color || null },
+                { $inc: { quantity: qtyDiff } },
+                { session }
+            );
+        } else if (color !== undefined && color !== oldColor) {
+            // COLOR CHANGED: Move inventory between colors
+            if (oldColor) {
+                await Inventory.findOneAndUpdate(
+                    { product: purchase.product, color: oldColor },
+                    { $inc: { quantity: -oldQuantity } },
+                    { session }
+                );
+            }
+            
+            await Inventory.findOneAndUpdate(
+                { product: purchase.product, color: color || null },
+                { $inc: { quantity: oldQuantity } },
+                { upsert: true, session }
             );
         }
 
         await session.commitTransaction();
 
-        // Populate final purchase
+        // Populate response
         const populatedPurchase = await Purchase.findById(req.params.id)
-            .populate('product', 'name type purchasePrice salePrice')
+            .populate({
+                path: 'product',
+                select: 'name type code purchasePrice salePrice'
+            })
             .populate('color', 'name hexCode codeName')
             .populate('createdBy', 'name email');
-
-        // === 4. Trigger real-time update in frontend ===
-        // This will make Inventory.jsx refresh immediately
-        setTimeout(() => {
-            window.dispatchEvent(new Event('inventoryShouldUpdate'));
-            localStorage.setItem('inventoryLastUpdate', Date.now().toString());
-        }, 100);
 
         res.json({
             success: true,
@@ -228,9 +294,15 @@ const updatePurchase = async (req, res) => {
 // @desc    Delete purchase
 // @route   DELETE /api/purchases/:id
 // @access  Private
+// @desc    Delete purchase
+// @route   DELETE /api/purchases/:id
+// @access  Private
 const deletePurchase = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
-        const purchase = await Purchase.findById(req.params.id);
+        const purchase = await Purchase.findById(req.params.id).session(session);
 
         if (!purchase) {
             return res.status(404).json({
@@ -239,19 +311,43 @@ const deletePurchase = async (req, res) => {
             });
         }
 
-        await Purchase.findByIdAndDelete(req.params.id);
+        // DECREASE INVENTORY BEFORE DELETING PURCHASE
+        const inventoryFilter = {
+            product: purchase.product,
+            color: purchase.color || null
+        };
+
+        await Inventory.findOneAndUpdate(
+            inventoryFilter,
+            { 
+                $inc: { quantity: -purchase.quantity }, // SUBTRACT quantity
+                $set: { 
+                    lastUpdated: new Date(),
+                    updatedBy: req.user.id
+                }
+            },
+            { session }
+        );
+
+        // DELETE THE PURCHASE
+        await Purchase.findByIdAndDelete(req.params.id, { session });
+
+        await session.commitTransaction();
 
         res.json({
             success: true,
-            message: 'Purchase deleted successfully'
+            message: 'Purchase deleted successfully and inventory updated'
         });
     } catch (error) {
+        await session.abortTransaction();
         console.error('Delete purchase error:', error);
         res.status(500).json({
             success: false,
             message: 'Error deleting purchase',
             error: error.message
         });
+    } finally {
+        session.endSession();
     }
 };
 
