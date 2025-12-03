@@ -7,7 +7,8 @@ const {
     updateProduct, 
     deleteProduct,
     uploadProductsFromCSV,
-    bulkDeleteAllProducts
+    bulkDeleteAllProducts,
+    fixInventoryQuantities
 } = require('../controllers/product.controller');
 const { protect } = require('../middleware/auth.middleware');
 
@@ -34,5 +35,6 @@ router.delete('/bulk-delete-all', protect, bulkDeleteAllProducts);
 router.post('/upload-csv', protect, upload.single('csvFile'), uploadProductsFromCSV);
 router.put('/:id', protect, updateProduct);
 router.delete('/:id', protect, deleteProduct);
+fixInventoryQuantities
 
 module.exports = router;

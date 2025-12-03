@@ -227,15 +227,32 @@ const uploadProductsFromCSV = async (req, res) => {
             });
         }
 
-        const created = await Product.insertMany(toCreate);
+        // ──────────────────────────────────────────────────────────────
+        // PERFECT FIX: Match created products with CSV rows by insertion order
+        // This guarantees 100% correct stock even with duplicate names/types
+        // ──────────────────────────────────────────────────────────────
+        const created = await Product.insertMany(
+          toCreate.map(item => ({
+            name: item.name?.trim(),
+            type: item.type,
+            purchasePrice: item.purchasePrice,
+            salePrice: item.salePrice,
+            discount: item.discount || 0,
+            code: item.code || null,
+            createdBy: req.user.id
+          }))
+        );
 
-        // Add initial stock with correct color
-        for (const product of created) {
-            const src = toCreate.find(p => p.name === product.name && p.type === product.type);
-            if (src && src.qty > 0) {
-                await addInitialStock(product, src.qty, req.user.id, src.colorId);
-            }
+        // Match by index → perfect 1:1 correspondence
+        for (let i = 0; i < created.length; i++) {
+          const product = created[i];
+          const src = toCreate[i];
+
+          if (src.qty > 0) {
+            await addInitialStock(product, src.qty, req.user.id, src.colorId);
+          }
         }
+        // ──────────────────────────────────────────────────────────────
 
         res.status(201).json({
             success: true,
