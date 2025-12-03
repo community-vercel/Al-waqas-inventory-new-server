@@ -6,7 +6,8 @@ const {
     createProduct, 
     updateProduct, 
     deleteProduct,
-    uploadProductsFromCSV 
+    uploadProductsFromCSV,
+    bulkDeleteAllProducts
 } = require('../controllers/product.controller');
 const { protect } = require('../middleware/auth.middleware');
 
@@ -29,6 +30,7 @@ const upload = multer({
 
 router.get('/', protect, getProducts);
 router.post('/', protect, createProduct);
+router.delete('/bulk-delete-all', protect, bulkDeleteAllProducts);
 router.post('/upload-csv', protect, upload.single('csvFile'), uploadProductsFromCSV);
 router.put('/:id', protect, updateProduct);
 router.delete('/:id', protect, deleteProduct);

@@ -299,6 +299,41 @@ const updateProduct = async (req, res) => {
     }
 };
 
+// BULK DELETE ALL PRODUCTS - DANGER ZONE
+const bulkDeleteAllProducts = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    // Soft delete all products
+    await Product.updateMany(
+      { isActive: true },
+      { isActive: false },
+      { session }
+    );
+
+    // Delete related inventory & purchases
+    await Inventory.deleteMany({}, { session });
+    await Purchase.deleteMany({}, { session });
+
+    await session.commitTransaction();
+
+    res.json({ 
+      success: true, 
+      message: 'All products have been permanently deleted along with their stock and purchase history.' 
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    console.error('Bulk delete error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to delete all products' 
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
 // DELETE PRODUCT — FULL CLEANUP
 const deleteProduct = async (req, res) => {
     const session = await mongoose.startSession();
@@ -333,5 +368,6 @@ module.exports = {
     createProduct,
     updateProduct,
     deleteProduct,
-    uploadProductsFromCSV
+    uploadProductsFromCSV,
+    bulkDeleteAllProducts
 };
