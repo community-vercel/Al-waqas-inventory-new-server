@@ -44,7 +44,7 @@ const addInitialStock = async (product, qty, userId, colorId = null) => {
             await Purchase.create([{
                 product: product._id,
                 color: colorId,
-                supplier: 'Nippon',
+                supplier: 'Initial Stock',
                 quantity: qty,
                 unitPrice: product.purchasePrice,
                 totalAmount: qty * product.purchasePrice,
