@@ -52,8 +52,8 @@ const createColor = async (req, res) => {
 
         const color = await Color.create({
             name,
-            codeName: codeName.toUpperCase(),
-            hexCode: hexCode.toUpperCase(),
+           codeName: codeName?.trim(),
+            hexCode: hexCode?.trim(),
             createdBy: req.user.id
         });
 

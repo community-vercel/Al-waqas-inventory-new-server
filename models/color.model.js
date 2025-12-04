@@ -8,13 +8,13 @@ const colorSchema = new mongoose.Schema({
         trim: true,
         unique: true
     },
-    codeName: {
-        type: String,
-        required: [true, 'Code name is required'],
-        trim: true,
-        unique: true,
-        uppercase: true
-    },
+   codeName: {
+  type: String,
+  required: [true, 'Code name is required'],
+  trim: true,
+  unique: true,
+ set: (v) => v.toUpperCase()
+},
     hexCode: {
         type: String,
         required: [true, 'Hex code is required'],

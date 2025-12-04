@@ -1,57 +1,58 @@
 const Inventory = require('../models/inventory.model');
 const Product = require('../models/product.model');
-
+const Color = require('../models/color.model'); // MUST BE HERE
 // GET ALL INVENTORY — INCLUDING ZERO STOCK
+// GET ALL INVENTORY — INCLUDING ZERO STOCK + AUTO COLOR MATCHING BY CODE
 const getInventory = async (req, res) => {
   try {
-    // First get ALL products (active only)
+    // 1. Get all active products
     const products = await Product.find({ isActive: true }).select('_id name type code purchasePrice');
 
-    // Then get existing inventory entries
-    const inventoryEntries = await Inventory.find()
-      .populate({
-        path: 'product',
-        select: 'name type code purchasePrice'
-      })
-      .populate({
-        path: 'color',
-        select: 'name codeName hexCode'
-      })
-      .populate('updatedBy', 'name email');
-
-    // Create a map of productId → inventory entry
-    const inventoryMap = new Map();
-    inventoryEntries.forEach(item => {
-      inventoryMap.set(item.product._id.toString(), item);
+    // 2. Get all colors and build codeName → color map
+    const colors = await Color.find({ isActive: true });
+    const colorMap = new Map();
+    colors.forEach(color => {
+      if (color.codeName) {
+        colorMap.set(color.codeName.trim().toUpperCase(), color);
+      }
     });
 
-    // Build final list: every product appears, even if no inventory entry
+    // 3. Get real inventory entries
+    const inventoryEntries = await Inventory.find()
+      .populate('product', 'name type code purchasePrice')
+      .populate('color', 'name codeName hexCode')
+      .populate('updatedBy', 'name email');
+
+    // 4. Build final list with auto color matching
     const fullInventory = products.map(product => {
-      const existing = inventoryMap.get(product._id.toString());
-      
-      if (existing) {
-        return existing; 
+      const productCode = product.code?.trim().toUpperCase();
+
+      // Find if there's a real inventory entry for this product
+      const realEntry = inventoryEntries.find(entry => 
+        entry.product._id.toString() === product._id.toString()
+      );
+
+      if (realEntry) {
+        return realEntry; // Real entry wins — use its color (even if null)
       }
 
-      // No inventory record → create virtual one with qty = 0
+      // No real entry → create virtual one
+      const matchedColor = productCode ? colorMap.get(productCode) : null;
+
       return {
         _id: `virtual-${product._id}`,
         product: product,
-        color: null,
+        color: matchedColor || null,  // AUTO-MATCHED COLOR HERE
         quantity: 0,
         minStockLevel: 5,
         lastUpdated: null,
         updatedBy: null,
-        isVirtual: true 
+        isVirtual: true
       };
     });
 
-    // Sort by product name
-    fullInventory.sort((a, b) => {
-      const nameA = a.product?.name || '';
-      const nameB = b.product?.name || '';
-      return nameA.localeCompare(nameB);
-    });
+    // Sort by name
+    fullInventory.sort((a, b) => (a.product?.name || '').localeCompare(b.product?.name || ''));
 
     res.json({
       success: true,
