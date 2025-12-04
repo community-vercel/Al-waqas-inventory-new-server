@@ -1,4 +1,4 @@
-// models/purchase.model.js - FINAL WITH RETRY ON CONFLICT
+// models/purchase.model.js
 const mongoose = require('mongoose');
 
 // Helper: retry on WriteConflict (code 112) or TransientTransactionError
@@ -17,7 +17,7 @@ const withRetry = async (operation, maxRetries = 5) => {
         await new Promise((res) => setTimeout(res, 100 * (i + 1)));
         continue;
       }
-      throw error; // Re-throw if not retryable or max retries reached
+      throw error; 
     }
   }
 };

@@ -1,24 +1,5 @@
-// models/sale.model.js - FINAL: COLOR IS OPTIONAL (AUTO FROM CODE)
+// models/sale.model.js 
 const mongoose = require('mongoose');
-
-const withRetry = async (operation, maxRetries = 5) => {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      return await operation();
-    } catch (error) {
-      const isWriteConflict =
-        error.code === 112 ||
-        error.codeName === 'WriteConflict' ||
-        error.errorLabels?.includes('TransientTransactionError');
-
-      if (isWriteConflict && i < maxRetries - 1) {
-        await new Promise((res) => setTimeout(res, 100 * (i + 1)));
-        continue;
-      }
-      throw error;
-    }
-  }
-};
 
 const saleSchema = new mongoose.Schema(
   {
@@ -37,7 +18,7 @@ const saleSchema = new mongoose.Schema(
     color: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Color',
-      required: false,  // ← NOW OPTIONAL
+      required: false,  
       default: null
     },
     quantity: {
@@ -70,7 +51,6 @@ const saleSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// models/sale.model.js — ADD THIS EXACT MIDDLEWARE
 
 // Deduct inventory when sale is created
 saleSchema.post('save', async function (doc) {

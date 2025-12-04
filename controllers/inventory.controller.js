@@ -1,4 +1,3 @@
-// controllers/inventory.controller.js - FINAL: SHOW ALL PRODUCTS (INCLUDING QTY = 0)
 const Inventory = require('../models/inventory.model');
 const Product = require('../models/product.model');
 
@@ -31,7 +30,7 @@ const getInventory = async (req, res) => {
       const existing = inventoryMap.get(product._id.toString());
       
       if (existing) {
-        return existing; // Already has stock record
+        return existing; 
       }
 
       // No inventory record → create virtual one with qty = 0
@@ -43,7 +42,7 @@ const getInventory = async (req, res) => {
         minStockLevel: 5,
         lastUpdated: null,
         updatedBy: null,
-        isVirtual: true // optional flag
+        isVirtual: true 
       };
     });
 
@@ -75,7 +74,7 @@ const getLowStock = async (req, res) => {
   try {
     const lowStock = await Inventory.find({
       $expr: { $lte: ['$quantity', '$minStockLevel'] },
-      quantity: { $gt: 0 } // Only real low stock, not zero
+      quantity: { $gt: 0 } 
     })
       .populate('product', 'name type code purchasePrice')
       .populate('color', 'name codeName hexCode')

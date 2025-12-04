@@ -1,4 +1,3 @@
-// controllers/product.controller.js - FINAL: NO ERRORS, COLOR FROM CODE, INVENTORY WORKS
 const mongoose = require('mongoose');
 const Product = require('../models/product.model');
 const Purchase = require('../models/purchase.model');
@@ -149,7 +148,7 @@ const createProduct = async (req, res) => {
     }
 };
 
-// CSV UPLOAD — FINAL FIXED VERSION
+// CSV UPLOAD
 const uploadProductsFromCSV = async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
@@ -227,10 +226,6 @@ const uploadProductsFromCSV = async (req, res) => {
             });
         }
 
-        // ──────────────────────────────────────────────────────────────
-        // PERFECT FIX: Match created products with CSV rows by insertion order
-        // This guarantees 100% correct stock even with duplicate names/types
-        // ──────────────────────────────────────────────────────────────
         const created = await Product.insertMany(
           toCreate.map(item => ({
             name: item.name?.trim(),

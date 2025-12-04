@@ -1,4 +1,4 @@
-// models/inventory.model.js - FINAL FIXED VERSION
+// models/inventory.model.js
 const mongoose = require('mongoose');
 
 const inventorySchema = new mongoose.Schema({
@@ -10,7 +10,7 @@ const inventorySchema = new mongoose.Schema({
    color: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Color',
-        default: null  // null = no color (accessories, etc.)
+        default: null  
     },
     quantity: {
         type: Number,
@@ -36,7 +36,7 @@ const inventorySchema = new mongoose.Schema({
     timestamps: true
 });
 
-// CRITICAL: One inventory record per product + color combination
+//One inventory record per product + color combination
 inventorySchema.index({ product: 1, color: 1 }, { unique: true });
 
 // Optional: helpful for queries

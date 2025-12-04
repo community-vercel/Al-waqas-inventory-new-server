@@ -1,4 +1,3 @@
-// controllers/purchase.controller.js - FIXED WITH INVENTORY UPDATE
 const mongoose = require('mongoose');
 const Purchase = require('../models/purchase.model');
 const Product = require('../models/product.model');
@@ -56,10 +55,6 @@ const getPurchases = async (req, res) => {
     }
 };
 
-// @desc    Create new purchase
-// @route   POST /api/purchases
-// @access  Private
-// controllers/purchase.controller.js - FINAL CLEAN VERSION
 // @desc    Create new purchase
 // @route   POST /api/purchases
 // @access  Private
@@ -291,12 +286,10 @@ const updatePurchase = async (req, res) => {
         session.endSession();
     }
 };
-// @desc    Delete purchase
-// @route   DELETE /api/purchases/:id
+
 // @access  Private
 // @desc    Delete purchase
 // @route   DELETE /api/purchases/:id
-// @access  Private
 const deletePurchase = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -320,7 +313,7 @@ const deletePurchase = async (req, res) => {
         await Inventory.findOneAndUpdate(
             inventoryFilter,
             { 
-                $inc: { quantity: -purchase.quantity }, // SUBTRACT quantity
+                $inc: { quantity: -purchase.quantity }, 
                 $set: { 
                     lastUpdated: new Date(),
                     updatedBy: req.user.id

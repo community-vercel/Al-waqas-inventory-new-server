@@ -1,4 +1,3 @@
-// controllers/sale.controller.js - FINAL: COLOR OPTIONAL + AUTO FROM PRODUCT CODE
 const mongoose = require('mongoose');
 const Sale = require('../models/sale.model');
 const Inventory = require('../models/inventory.model');

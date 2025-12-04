@@ -1,4 +1,4 @@
-// models/product.model.js - UPGRADED WITH INITIAL STOCK + CODE
+// models/product.model.js 
 const mongoose = require('mongoose');
 
 const productSchema = new mongoose.Schema({
@@ -33,8 +33,7 @@ const productSchema = new mongoose.Schema({
         trim: true,
         uppercase: true,
         default: null,
-        sparse: true  // Allows multiple nulls + unique if needed later
-        // unique: true → you can enable later if needed
+        sparse: true  
     },
   
     initialStock: {
@@ -44,7 +43,6 @@ const productSchema = new mongoose.Schema({
             addedAt: { type: Date, default: Date.now }
         },
         default: () => new Map()
-        // This will store: colorId → { qty: 50, addedAt: Date }
     },
     isActive: {
         type: Boolean,

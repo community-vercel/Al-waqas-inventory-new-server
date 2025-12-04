@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -6,7 +5,6 @@ require('dotenv').config();
 
 const connectDB = require('./config/database');
 
-// Route imports
 const authRoutes = require('./routes/auth.routes');
 const colorRoutes = require('./routes/color.routes');
 const productRoutes = require('./routes/product.routes');
@@ -14,17 +12,15 @@ const inventoryRoutes = require('./routes/inventory.routes');
 const expenseRoutes = require('./routes/expense.routes');
 const purchaseRoutes = require('./routes/purchase.routes');
 const saleRoutes = require('./routes/sale.routes');
-const contactRoutes = require('./routes/contact.routes'); // Add this line
+const contactRoutes = require('./routes/contact.routes');
 
 
-// Connect to database
 connectDB();
 
 const app = express();
 mongoose.set('strictPopulate', false);
 
 
-// Middleware
 app.use(cors({
   origin: [
     'http://localhost:5173',
