@@ -101,18 +101,18 @@ const createProduct = async (req, res) => {
             });
         }
 
-        const exists = await Product.findOne({
-            name: { $regex: `^${name.trim()}$`, $options: 'i' },
-            type: type.toLowerCase(),
-            isActive: true
-        });
+        // const exists = await Product.findOne({
+        //     name: { $regex: `^${name.trim()}$`, $options: 'i' },
+        //     type: type.toLowerCase(),
+        //     isActive: true
+        // });
 
-        if (exists) {
-            return res.status(400).json({
-                success: false,
-                message: `Product "${name}" (${type}) already exists`
-            });
-        }
+        // if (exists) {
+        //     return res.status(400).json({
+        //         success: false,
+        //         message: `Product "${name}" (${type}) already exists`
+        //     });
+        // }
 
         const product = await Product.create({
             name: name.trim(),
@@ -275,16 +275,16 @@ const updateProduct = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Invalid type' });
         }
 
-        const exists = await Product.findOne({
-            name: { $regex: `^${name.trim()}$`, $options: 'i' },
-            type: type.toLowerCase(),
-            isActive: true,
-            _id: { $ne: req.params.id }
-        });
+        // const exists = await Product.findOne({
+        //     name: { $regex: `^${name.trim()}$`, $options: 'i' },
+        //     type: type.toLowerCase(),
+        //     isActive: true,
+        //     _id: { $ne: req.params.id }
+        // });
 
-        if (exists) {
-            return res.status(400).json({ success: false, message: 'Product already exists' });
-        }
+        // if (exists) {
+        //     return res.status(400).json({ success: false, message: 'Product already exists' });
+        // }
 
         const updated = await Product.findByIdAndUpdate(
             req.params.id,
