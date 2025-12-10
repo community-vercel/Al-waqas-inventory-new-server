@@ -215,16 +215,16 @@ const uploadProductsFromCSV = async (req, res) => {
         }
 
         // Check duplicates
-        const existing = await Product.find({
-            $or: toCreate.map(p => ({ name: p.name, type: p.type, isActive: true }))
-        });
-        if (existing.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Some products already exist',
-                existing: existing.map(p => `${p.name} (${p.type})`)
-            });
-        }
+        // const existing = await Product.find({
+        //     $or: toCreate.map(p => ({ name: p.name, type: p.type, isActive: true }))
+        // });
+        // if (existing.length > 0) {
+        //     return res.status(400).json({
+        //         success: false,
+        //         message: 'Some products already exist',
+        //         existing: existing.map(p => `${p.name} (${p.type})`)
+        //     });
+        // }
 
         const created = await Product.insertMany(
           toCreate.map(item => ({
