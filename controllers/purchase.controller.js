@@ -290,57 +290,87 @@ const updatePurchase = async (req, res) => {
 // @access  Private
 // @desc    Delete purchase
 // @route   DELETE /api/purchases/:id
+// In purchase.controller.js - deletePurchase function, ensure proper response:
+// @access  Private
+// @desc    Delete purchase with retry logic for write conflicts
+// @route   DELETE /api/purchases/:id
 const deletePurchase = async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
+    let session;
+    let retries = 3; // Number of retry attempts
+    let retryDelay = 100; // Delay between retries in ms
 
-    try {
-        const purchase = await Purchase.findById(req.params.id).session(session);
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        session = await mongoose.startSession();
+        session.startTransaction();
 
-        if (!purchase) {
-            return res.status(404).json({
-                success: false,
-                message: 'Purchase not found'
+        try {
+            const purchase = await Purchase.findById(req.params.id).session(session);
+
+            if (!purchase) {
+                await session.abortTransaction();
+                return res.status(404).json({
+                    success: false,
+                    message: 'Purchase not found'
+                });
+            }
+
+            // DECREASE INVENTORY BEFORE DELETING PURCHASE
+            const inventoryFilter = {
+                product: purchase.product,
+                color: purchase.color || null
+            };
+
+            await Inventory.findOneAndUpdate(
+                inventoryFilter,
+                { 
+                    $inc: { quantity: -purchase.quantity }, 
+                    $set: { 
+                        lastUpdated: new Date(),
+                        updatedBy: req.user.id
+                    }
+                },
+                { session }
+            );
+
+            // DELETE THE PURCHASE
+            await Purchase.findByIdAndDelete(req.params.id, { session });
+
+            await session.commitTransaction();
+            
+            console.log(`Purchase ${req.params.id} deleted successfully on attempt ${attempt}`);
+            
+            res.json({
+                success: true,
+                message: 'Purchase deleted successfully and inventory updated'
             });
+            
+            return; // Exit function on success
+            
+        } catch (error) {
+            await session.abortTransaction();
+            
+            // Check if it's a write conflict and we should retry
+            if (error.message.includes('Write conflict') && attempt < retries) {
+                console.warn(`Write conflict on attempt ${attempt}, retrying in ${retryDelay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, retryDelay));
+                retryDelay *= 2; // Exponential backoff
+                continue; // Retry
+            }
+            
+            console.error('Delete purchase error:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error deleting purchase',
+                error: attempt === retries 
+                    ? 'Failed after multiple retries. Please try again.' 
+                    : error.message
+            });
+            return;
+        } finally {
+            if (session) {
+                session.endSession();
+            }
         }
-
-        // DECREASE INVENTORY BEFORE DELETING PURCHASE
-        const inventoryFilter = {
-            product: purchase.product,
-            color: purchase.color || null
-        };
-
-        await Inventory.findOneAndUpdate(
-            inventoryFilter,
-            { 
-                $inc: { quantity: -purchase.quantity }, 
-                $set: { 
-                    lastUpdated: new Date(),
-                    updatedBy: req.user.id
-                }
-            },
-            { session }
-        );
-
-        // DELETE THE PURCHASE
-        await Purchase.findByIdAndDelete(req.params.id, { session });
-
-        await session.commitTransaction();
-
-        res.json({
-            success: true,
-            message: 'Purchase deleted successfully and inventory updated'
-        });
-    } catch (error) {
-        await session.abortTransaction();
-        console.error('Delete purchase error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error deleting purchase',
-            error: error.message
-        });
-    } finally {
-        session.endSession();
     }
 };
 

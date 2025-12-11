@@ -1,14 +1,13 @@
-// models/sale.model.js 
+// models/sale.model.js - FINAL FIXED VERSION (Deduct from BOTH Inventory & Purchase)
 const mongoose = require('mongoose');
 
 const saleSchema = new mongoose.Schema(
   {
-    date: { type: Date, required: true, default: Date.now },
-    customerName: {
-      type: String,
-      required: [true, 'Customer name is required'],
-      trim: true,
-      maxlength: [100, 'Customer name cannot exceed 100 characters'],
+    date: { 
+      type: Date, 
+      required: true, 
+      default: Date.now,
+      index: true 
     },
     product: {
       type: mongoose.Schema.Types.ObjectId,
@@ -18,7 +17,6 @@ const saleSchema = new mongoose.Schema(
     color: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Color',
-      required: false,  
       default: null
     },
     quantity: {
@@ -42,71 +40,140 @@ const saleSchema = new mongoose.Schema(
       required: [true, 'Total amount is required'],
       min: [0, 'Total amount cannot be negative'],
     },
+    invoiceReference: {
+      type: String,
+      index: true
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
     },
+    saleType: {
+      type: String,
+      enum: ['daily', 'bulk', 'return'],
+      default: 'daily'
+    }
   },
   { timestamps: true }
 );
 
+// Pre-save: Calculate total + generate invoice reference
+saleSchema.pre('save', function() {
+  this.totalAmount = parseFloat((this.quantity * this.unitPrice * (1 - this.discount / 100)).toFixed(2));
+  
+  if (!this.invoiceReference) {
+    const date = new Date(this.date);
+    const dateStr = date.toISOString().split('T')[0].replace(/-/g, '');
+    const random = Math.floor(1000 + Math.random() * 9000);
+    this.invoiceReference = `SALE-${dateStr}-${random}`;
+  }
+});
 
-// Deduct inventory when sale is created
-saleSchema.post('save', async function (doc) {
+// POST-SAVE: Deduct from BOTH Inventory AND Purchase (FIFO logic)
+saleSchema.post('save', async function(doc) {
   try {
     const Inventory = mongoose.model('Inventory');
+    const Purchase = mongoose.model('Purchase');
 
-    // Find inventory entry — color may be null
     const filter = { product: doc.product };
     if (doc.color) filter.color = doc.color;
 
-    const result = await Inventory.findOneAndUpdate(
+    let remainingQty = doc.quantity;
+
+    // 1. Deduct from Inventory (current stock)
+    await Inventory.findOneAndUpdate(
       filter,
-      {
+      { 
         $inc: { quantity: -doc.quantity },
         lastUpdated: new Date(),
         updatedBy: doc.createdBy
       },
-      { new: true }
+      { upsert: true }
     );
 
-    if (!result) {
-      console.error(`Inventory not found for product ${doc.product} color ${doc.color}`);
-      // Don't throw — sale already saved
-    } else {
-      console.log(`Stock deducted: ${doc.quantity} of product ${doc.product}`);
+    // 2. Deduct from Purchase records (FIFO - oldest first)
+    const purchases = await Purchase.find(filter)
+      .sort({ date: 1 }) // Oldest first
+      .select('_id quantity');
+
+    for (const purchase of purchases) {
+      if (remainingQty <= 0) break;
+
+      const deduct = Math.min(remainingQty, purchase.quantity);
+      await Purchase.findByIdAndUpdate(purchase._id, {
+        $inc: { quantity: -deduct }
+      });
+
+      remainingQty -= deduct;
     }
+
+    if (remainingQty > 0) {
+      console.warn(`Warning: Could not deduct ${remainingQty} units from purchase history (Product ID: ${doc.product})`);
+    }
+
+    console.log(`Sale deducted: ${doc.quantity} units from stock & purchase records`);
+
   } catch (error) {
-    console.error('Failed to deduct inventory on sale:', error);
+    console.error('Failed to deduct from inventory/purchase on sale:', error);
   }
 });
 
-// Restore inventory when sale is deleted
-saleSchema.post('findOneAndDelete', async function (doc) {
+// POST-DELETE: Restore BOTH Inventory AND Purchase
+saleSchema.post('findOneAndDelete', async function(doc) {
   if (!doc) return;
 
   try {
     const Inventory = mongoose.model('Inventory');
+    const Purchase = mongoose.model('Purchase');
+
     const filter = { product: doc.product };
     if (doc.color) filter.color = doc.color;
 
+    // Restore Inventory
     await Inventory.findOneAndUpdate(
       filter,
-      {
-        $inc: { quantity: doc.quantity },
-        lastUpdated: new Date()
-      }
+      { $inc: { quantity: doc.quantity }, lastUpdated: new Date() }
     );
-    console.log(`Stock restored: ${doc.quantity} for deleted sale`);
+
+    // Restore Purchase (FIFO - add back to oldest purchase)
+    const oldestPurchase = await Purchase.findOne(filter).sort({ date: 1 });
+    if (oldestPurchase) {
+      await Purchase.findByIdAndUpdate(oldestPurchase._id, {
+        $inc: { quantity: doc.quantity }
+      });
+    }
+
+    console.log(`Sale deletion restored: ${doc.quantity} units to inventory & purchase`);
   } catch (error) {
-    console.error('Failed to restore inventory:', error);
+    console.error('Failed to restore inventory/purchase on sale delete:', error);
   }
 });
 
-// Indexes
-saleSchema.index({ date: -1 });
-saleSchema.index({ product: 1 });
-saleSchema.index({ customerName: 1 });
+// Keep your existing statics and indexes
+saleSchema.statics.getDailySummary = async function(date) {
+  const startDate = new Date(date);
+  startDate.setHours(0, 0, 0, 0);
+  const endDate = new Date(date);
+  endDate.setHours(23, 59, 59, 999);
+
+  const result = await this.aggregate([
+    { $match: { date: { $gte: startDate, $lte: endDate } } },
+    {
+      $group: {
+        _id: null,
+        totalSales: { $sum: 1 },
+        totalQuantity: { $sum: "$quantity" },
+        totalAmount: { $sum: "$totalAmount" },
+        averageSaleValue: { $avg: "$totalAmount" }
+      }
+    }
+  ]);
+
+  return result[0] || { totalSales: 0, totalQuantity: 0, totalAmount: 0, averageSaleValue: 0 };
+};
+
+saleSchema.index({ date: -1, product: 1 });
+saleSchema.index({ product: 1, date: -1 });
 
 module.exports = mongoose.model('Sale', saleSchema);
