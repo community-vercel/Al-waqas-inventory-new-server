@@ -458,6 +458,47 @@ const getSalesStats = async (req, res) => {
     });
   }
 };
+// @desc    Get ALL sales for a specific date (NO PAGINATION - for daily view)
+// @route   GET /api/sales/daily-all?date=2025-04-05
+// @access  Private
+const getAllSalesForDate = async (req, res) => {
+  try {
+    const { date } = req.query;
+
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: 'Date is required'
+      });
+    }
+
+    const startDate = new Date(date);
+    startDate.setHours(0, 0, 0, 0);
+    
+    const endDate = new Date(date);
+    endDate.setHours(23, 59, 59, 999);
+
+    const sales = await Sale.find({
+      date: { $gte: startDate, $lte: endDate }
+    })
+      .populate('product', 'name type code salePrice discount')
+      .populate('color', 'name codeName hexCode')
+      .populate('createdBy', 'name email')
+      .sort({ createdAt: -1 }); // Newest first
+
+    res.json({
+      success: true,
+      count: sales.length,
+      data: sales
+    });
+  } catch (error) {
+    console.error('Error fetching all sales for date:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
 
 module.exports = {
   getSales,
@@ -467,5 +508,6 @@ module.exports = {
   getSalesStats,
   getDailySales,
   getDailySummary,
-  getSalesByDateRange
+  getSalesByDateRange,
+  getAllSalesForDate
 };

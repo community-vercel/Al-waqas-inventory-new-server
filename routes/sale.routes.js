@@ -8,7 +8,8 @@ const {
   getDailySales,
   getDailySummary,
   getSalesByDateRange,
-  createBulkSales 
+  createBulkSales, 
+  getAllSalesForDate
 } = require('../controllers/sale.controller');
 const { protect } = require('../middleware/auth.middleware');
 
@@ -37,5 +38,7 @@ router.post('/bulk', protect, createBulkSales);
 
 // Delete a sale
 router.delete('/:id', protect, deleteSale);
+
+router.get('/daily-all', protect, getAllSalesForDate);
 
 module.exports = router;
