@@ -13,6 +13,7 @@ const expenseRoutes = require('./routes/expense.routes');
 const purchaseRoutes = require('./routes/purchase.routes');
 const saleRoutes = require('./routes/sale.routes');
 const contactRoutes = require('./routes/contact.routes');
+const ledgerRoutes = require('./routes/ledger.routes');
 
 
 connectDB();
@@ -44,6 +45,7 @@ app.use('/api/expenses', expenseRoutes);
 app.use('/api/purchases', purchaseRoutes);
 app.use('/api/sales', saleRoutes);
 app.use('/api/contacts', contactRoutes)
+app.use('/api/ledgers', ledgerRoutes);
 
 
 
