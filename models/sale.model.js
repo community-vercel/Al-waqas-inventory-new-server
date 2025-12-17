@@ -22,7 +22,7 @@ const saleSchema = new mongoose.Schema(
     quantity: {
       type: Number,
       required: [true, 'Sale quantity is required'],
-      min: [1, 'Quantity must be at least 1'],
+      min: [0.5, 'Quantity must be at least 0.5'],
     },
     unitPrice: {
       type: Number,

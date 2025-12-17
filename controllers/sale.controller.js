@@ -10,6 +10,9 @@ const Color = require('../models/color.model');
 const createSale = async (req, res) => {
   try {
     const { product, quantity, unitPrice, discount = 0, color, date } = req.body;
+    console.log('Request body:', req.body);
+    console.log('Request body color:', req.body.color);
+
 
     console.log('Creating sale:', { product, quantity, unitPrice, discount });
 
@@ -48,16 +51,15 @@ const createSale = async (req, res) => {
     const totalAmount = parseFloat((subtotal - discountAmount).toFixed(2));
 
     const saleData = {
-      product,
-      color: color || null,
-      quantity: parseInt(quantity),
-      unitPrice: parseFloat(unitPrice),
-      discount: parseFloat(discount),
-      totalAmount,
-      createdBy: req.user.id,
-      date: date ? new Date(date) : new Date()
-    };
-
+  product,
+  color: color || null,
+  quantity: parseFloat(quantity),        // ← FIXED: parseFloat not parseInt
+  unitPrice: parseFloat(unitPrice),
+  discount: parseFloat(discount),
+  totalAmount,
+  createdBy: req.user.id,
+  date: date ? new Date(date) : new Date()
+};
     // CREATE SALE — MIDDLEWARE WILL HANDLE INVENTORY
     const sale = await Sale.create(saleData);
 
@@ -119,16 +121,16 @@ const createBulkSales = async (req, res) => {
         const discountAmount = subtotal * (discount / 100);
         const totalAmount = parseFloat((subtotal - discountAmount).toFixed(2));
 
-        const sale = await Sale.create({
-          product,
-          color: color || null,
-          quantity: parseInt(quantity),
-          unitPrice: parseFloat(unitPrice),
-          discount: parseFloat(discount),
-          totalAmount,
-          createdBy: req.user.id,
-          date: new Date()
-        });
+       const sale = await Sale.create({
+  product,
+  color: color || null,
+  quantity: parseFloat(quantity),        // ← FIXED: parseFloat not parseInt
+  unitPrice: parseFloat(unitPrice),
+  discount: parseFloat(discount),
+  totalAmount,
+  createdBy: req.user.id,
+  date: new Date()
+});
 
         const populatedSale = await Sale.findById(sale._id)
           .populate('product', 'name type code salePrice')
